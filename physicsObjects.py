@@ -35,6 +35,10 @@ class beamElement:
     def draw(self):
         pygame.draw.line(self.surf, self.color, self.pt1pos, self.pt2pos, 2)
 
+    def getCurrentLenght(self):
+        curLen = vectorModulus(self.pt1.getPosition(), self.pt2.getPosition()) 
+        return curLen
+
 #poligono generico
 class polygon:
     def __init__(self, points: list[pointMass], surf: pygame.surface):
@@ -107,6 +111,9 @@ class springMassBody:
         return self.beam.l0
 
     def getCurrentBeamLenght(self):
+        return self.beam.getCurrentLenght()
+
+    def getCurrentBeamLenghtDeprecated(self):
         lenght = vectorModulus(self.p1.getPosition(), self.p2.getPosition())
         return lenght
 
@@ -161,7 +168,8 @@ class springMassBodyPoly:
 
     def getCurrentBeamLenght(self):
         currLenList = []
-        lenght = vectorModulus(self.p1.getPosition(), self.p2.getPosition())
+        for beam in self.beams:
+            lenght = 0
         return lenght
 
     def elasticForce(self):
