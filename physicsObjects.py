@@ -14,6 +14,10 @@ class pointMass:
         self.radius = 5
         self.color = [255,10,10]
         self.surf = surf
+        self.totalXforce = 0
+        self.totalYforce = 0
+        self.vx = 0
+        self.vy = 0
     def draw(self):
         pygame.draw.circle(self.surf, self.color, [self.posX, self.posY], self.radius)
     def getPosition(self):
@@ -32,12 +36,24 @@ class beamElement:
         self.damping = 0.01
         self.l0 = vectorModulus(pt1.getPosition(), pt2.getPosition())
 
-    def draw(self):
-        pygame.draw.line(self.surf, self.color, self.pt1pos, self.pt2pos, 2)
-
     def getCurrentLenght(self):
         curLen = vectorModulus(self.pt1.getPosition(), self.pt2.getPosition()) 
         return curLen
+
+    def getCurrentOrientation(self):
+        curOr = beamDirection(self.pt1.getPosition(), self.pt2.getPosition())
+        return curOr
+    
+    def getElasticForce(self):
+        deltaL = self.getCurrentLenght() - self.l0 
+        eForce = abs(deltaL) * self.stiffness 
+        if self.getCurrentLenght() > self.l0:
+            return -eForce
+        else:
+            return eForce
+
+    def draw(self):
+        pygame.draw.line(self.surf, self.color, (self.pt1.posX, self.pt1.posY), (self.pt2.posX, self.pt2.posY), 2)
 
 #poligono generico
 class polygon:
@@ -93,113 +109,41 @@ class rigidBody:
             point.posX += vector[0]
             point.posY += vector[1]
 
-
-##TO DO IMPORTANTISSIMO
-#la classe spring mass body dovrà poi implementare un poligono come argomento
-#quindi riadattarla in modo simile a quella del rigidbody come argomenti
-#perché poi costruirà un body basandosi sui vertici e i beam del poligono
+#oggetto spring-mass body completo 
 class springMassBody:
-    def __init__(self, p1: pointMass, p2: pointMass, surf: pygame.surface):
-        self.p1 = p1
-        self.p2 = p2
-        self.beam = beamElement(p1,p2, surf)
-        self.surf = surf
-        self.v1 = 0
-        self.v2 = 0
-
-    def getBeamRestLenght(self):
-        return self.beam.l0
-
-    def getCurrentBeamLenght(self):
-        return self.beam.getCurrentLenght()
-
-    def getCurrentBeamLenghtDeprecated(self):
-        lenght = vectorModulus(self.p1.getPosition(), self.p2.getPosition())
-        return lenght
-
-    def elasticForce(self):
-        deltaL = self.getCurrentBeamLenght() - self.beam.l0 
-        eForce = abs(deltaL) * self.beam.stiffness 
-        if self.getCurrentBeamLenght() > self.beam.l0:
-            return -eForce
-        else:
-            return eForce
-    
-    def dampingForce(self):
-        dForce = [(self.v1)*self.beam.damping, (self.v2)*self.beam.damping]
-        return dForce
-    
-    def boundaryCond(self, bc1, bc2):
-        self.p1.posX -= bc1
-        self.p2.posX += bc2
-
-    def initialize(self):
-        #calcolo della dinamica dei punti
-        dampingForce = self.dampingForce()
-        acc1 = (-self.elasticForce()-dampingForce[0])/self.p1.mass
-        acc2 = (self.elasticForce()-dampingForce[1])/self.p2.mass
-        self.v1 += acc1     
-        self.v2 += acc2
-        #calcolo delle posizioni dei punti
-        self.p1.posX += self.v1*math.cos(beamDirection(self.p1.getPosition(),self.p2.getPosition()))
-        self.p1.posY += self.v1*math.sin(beamDirection(self.p1.getPosition(),self.p2.getPosition()))
-        self.p2.posX += self.v2*math.cos(beamDirection(self.p1.getPosition(),self.p2.getPosition()))
-        self.p2.posY += self.v2*math.sin(beamDirection(self.p1.getPosition(),self.p2.getPosition()))
-        self.draw()
-
-    def draw(self):
-        polygon([self.p1, self.p2], self.surf).draw()
-
-######################################################################
-class springMassBodyPoly:
     def __init__(self, poly: polygon, surf: pygame.surface):
         self.poly = poly
         self.points = poly.getPoints()
         self.beams = poly.getBeams()
         self.surf = surf
-        self.v1 = 0
-        self.v2 = 0
 
-    def getBeamRestLenght(self):
-        restLenList = []
+    def computeForcesOnPoint(self):
         for beam in self.beams:
-            restLenList.append(beam.l0)
-        return restLenList
+            beam.pt1.totalXforce -= beam.getElasticForce() * math.cos(beam.getCurrentOrientation())
+            beam.pt1.totalYforce -= beam.getElasticForce() * math.sin(beam.getCurrentOrientation())
+            beam.pt2.totalXforce += beam.getElasticForce() * math.cos(beam.getCurrentOrientation())
+            beam.pt2.totalYforce += beam.getElasticForce() * math.sin(beam.getCurrentOrientation())
+        
+    def boundaryCond(self):
+        self.points[1].posX += 10
 
-    def getCurrentBeamLenght(self):
-        currLenList = []
-        for beam in self.beams:
-            lenght = 0
-        return lenght
-
-    def elasticForce(self):
-        deltaL = self.getCurrentBeamLenght() - self.beam.l0 
-        eForce = abs(deltaL) * self.beam.stiffness 
-        if self.getCurrentBeamLenght() > self.beam.l0:
-            return -eForce
-        else:
-            return eForce
-    
-    def dampingForce(self):
-        dForce = [(self.v1)*self.beam.damping, (self.v2)*self.beam.damping]
-        return dForce
-    
-    def boundaryCond(self, bc1, bc2):
-        self.p1.posX -= bc1
-        self.p2.posX += bc2
+    def boundaryCond2P(self):
+        self.points[0].posX -= 10
+        self.points[0].posY -= 10
+        self.points[1].posX += 10
+        self.points[1].posY += 10
 
     def initialize(self):
-        #calcolo della dinamica dei punti
-        dampingForce = self.dampingForce()
-        acc1 = (-self.elasticForce()-dampingForce[0])/self.p1.mass
-        acc2 = (self.elasticForce()-dampingForce[1])/self.p2.mass
-        self.v1 += acc1     
-        self.v2 += acc2
-        #calcolo delle posizioni dei punti
-        self.p1.posX += self.v1*math.cos(beamDirection(self.p1.getPosition(),self.p2.getPosition()))
-        self.p1.posY += self.v1*math.sin(beamDirection(self.p1.getPosition(),self.p2.getPosition()))
-        self.p2.posX += self.v2*math.cos(beamDirection(self.p1.getPosition(),self.p2.getPosition()))
-        self.p2.posY += self.v2*math.sin(beamDirection(self.p1.getPosition(),self.p2.getPosition()))
+        self.computeForcesOnPoint()
+
+        for point in self.points:
+            accx = point.totalXforce/point.mass
+            accy = point.totalYforce/point.mass
+            point.vx += accx
+            point.vy += accy
+            point.posX += accx
+            point.posY += accy
+
         self.draw()
 
     def draw(self):
