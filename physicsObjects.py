@@ -3,10 +3,27 @@ import pygame
 #itertools.combination servià poi per fare tutte le connessioni necessarie tra i punti
 import itertools
 
+#------costanti------#
+GRAVITY = -0.2
+#------costanti------#
+
 #------classi------#
 
+class collisonLayer():
+    def __init__(self):
+        self.isGrounded = 0
+
+class collider:
+    def __init__(self, posx, posy, surf: pygame.surface):
+        self.posx = posx
+        self.posy = posy
+        self.boundary = posy
+        self.surf = surf
+    def draw(self):
+        pygame.draw.rect(self.surf, (50,50,50), (0, self.posy - 30, self.posx, 30))
+
 #massa puntiforme
-class pointMass:
+class pointMass(collisonLayer):
     def __init__(self, mass, posX, posY, surf: pygame.surface):
         self.mass = mass
         self.posX = posX
@@ -18,10 +35,15 @@ class pointMass:
         self.totalYforce = 0
         self.vx = 0
         self.vy = 0
+        self.damping = 0.004
     def draw(self):
         pygame.draw.circle(self.surf, self.color, [self.posX, self.posY], self.radius)
     def getPosition(self):
         return (self.posX, self.posY)
+
+    def checkGroundCollision(self, collider: collider):
+        if self.posY >= collider.boundary:
+            self.isGrounded = 1
 
 #elemento di connessione tra due punti
 class beamElement:
@@ -33,7 +55,7 @@ class beamElement:
         self.color = [0,10,10]
         self.surf = surf
         self.stiffness = 0.00005
-        self.damping = 0.01
+        self.damping = 0.001
         self.l0 = vectorModulus(pt1.getPosition(), pt2.getPosition())
 
     def getCurrentLenght(self):
@@ -111,21 +133,31 @@ class rigidBody:
 
 #oggetto spring-mass body completo 
 class springMassBody:
-    def __init__(self, poly: polygon, surf: pygame.surface):
+    def __init__(self, poly: polygon, surf: pygame.surface, pinpoint):
         self.poly = poly
         self.points = poly.getPoints()
         self.beams = poly.getBeams()
         self.surf = surf
+        self.gravity = 1
+        self.pinpoint = pinpoint
 
-    def computeForcesOnPoint(self):
+    def computeElasticForcesOnPoint(self):
         for beam in self.beams:
-            beam.pt1.totalXforce -= beam.getElasticForce() * math.cos(beam.getCurrentOrientation())
-            beam.pt1.totalYforce -= beam.getElasticForce() * math.sin(beam.getCurrentOrientation())
-            beam.pt2.totalXforce += beam.getElasticForce() * math.cos(beam.getCurrentOrientation())
-            beam.pt2.totalYforce += beam.getElasticForce() * math.sin(beam.getCurrentOrientation())
-        
+            beam.pt1.totalXforce -= (beam.getElasticForce() ) * math.cos(beam.getCurrentOrientation()) 
+            beam.pt1.totalYforce -= (beam.getElasticForce() ) * math.sin(beam.getCurrentOrientation())
+            beam.pt2.totalXforce += (beam.getElasticForce() ) * math.cos(beam.getCurrentOrientation()) 
+            beam.pt2.totalYforce += (beam.getElasticForce() ) * math.sin(beam.getCurrentOrientation())
+    
+    def applyGravity(self):
+        for point in self.points:
+            point.vy += GRAVITY
+
     def boundaryCond(self):
-        self.points[1].posX += 10
+        self.points[1].posX += 30
+
+    def pinAPoint(self):
+        self.points[0].posX = 200
+        self.points[0].posY = 10
 
     def boundaryCond2P(self):
         self.points[0].posX -= 10
@@ -134,15 +166,19 @@ class springMassBody:
         self.points[1].posY += 10
 
     def initialize(self):
-        self.computeForcesOnPoint()
+        self.computeElasticForcesOnPoint()
+        self.applyGravity()
+        if self.pinpoint:
+            self.pinAPoint()
 
         for point in self.points:
-            accx = point.totalXforce/point.mass
-            accy = point.totalYforce/point.mass
+            accx = (point.totalXforce - point.vx * point.damping)/point.mass 
+            accy = (point.totalYforce - point.vy * point.damping)/point.mass
             point.vx += accx
             point.vy += accy
             point.posX += accx
             point.posY += accy
+            
 
         self.draw()
 
@@ -163,7 +199,7 @@ def regularVertCalc(sideNum, radius):
 def vertsToPoints(verts: list[tuple], surf: pygame.surface):
     points = []
     for vert in verts: 
-        points.append(pointMass(10,vert[0],vert[1],surf))
+        points.append(pointMass(5,vert[0],vert[1],surf))
     return points
 
 #modulo di un vettore
