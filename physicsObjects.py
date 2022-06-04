@@ -1,7 +1,7 @@
 import math
 import pygame
-#itertools.combination servià poi per fare tutte le connessioni necessarie tra i punti
 import itertools
+import engineManager as em
 
 #------costanti------#
 GRAVITY = -0.2
@@ -23,7 +23,7 @@ class collider:
         pygame.draw.rect(self.surf, (50,50,50), (0, self.posy - 30, self.posx, 30))
 
 #massa puntiforme
-class pointMass(collisonLayer):
+class pointMass(collisonLayer, em.rObject):
     def __init__(self, mass, posX, posY, surf: pygame.surface):
         self.mass = mass
         self.posX = posX
@@ -36,6 +36,7 @@ class pointMass(collisonLayer):
         self.vx = 0
         self.vy = 0
         self.damping = 0.004
+        self.isPinned = 0
     def draw(self):
         pygame.draw.circle(self.surf, self.color, [self.posX, self.posY], self.radius)
     def getPosition(self):
@@ -46,7 +47,7 @@ class pointMass(collisonLayer):
             self.isGrounded = 1
 
 #elemento di connessione tra due punti
-class beamElement:
+class beamElement(em.rObject):
     def __init__(self, pt1: pointMass, pt2: pointMass, surf: pygame.surface):
         self.pt1 = pt1
         self.pt2 = pt2
@@ -54,7 +55,7 @@ class beamElement:
         self.pt2pos = pt2.getPosition()
         self.color = [0,10,10]
         self.surf = surf
-        self.stiffness = 0.00005
+        self.stiffness = 0.0001
         self.damping = 0.001
         self.l0 = vectorModulus(pt1.getPosition(), pt2.getPosition())
 
@@ -78,7 +79,7 @@ class beamElement:
         pygame.draw.line(self.surf, self.color, (self.pt1.posX, self.pt1.posY), (self.pt2.posX, self.pt2.posY), 2)
 
 #poligono generico
-class polygon:
+class polygon(em.rObject):
     def __init__(self, points: list[pointMass], surf: pygame.surface):
         self.points = points
         self.beams = makeBeamsCombs(points, surf)
@@ -118,7 +119,7 @@ class regularPolygon(polygon):
 #------forme dotate di proprietà fisiche------#
 
 #corpo rigido
-class rigidBody:
+class rigidBody(em.rObject):
     def __init__(self, polygon: polygon):
         self.polygon = polygon
 
@@ -132,7 +133,7 @@ class rigidBody:
             point.posY += vector[1]
 
 #oggetto spring-mass body completo 
-class springMassBody:
+class springMassBody(em.rObject):
     def __init__(self, poly: polygon, surf: pygame.surface, pinpoint):
         self.poly = poly
         self.points = poly.getPoints()
@@ -156,8 +157,10 @@ class springMassBody:
         self.points[1].posX += 30
 
     def pinAPoint(self):
-        self.points[0].posX = 200
-        self.points[0].posY = 10
+        if self.pinpoint:
+            self.points[0].isPinned = 1
+            self.points[0].posX = 200
+            self.points[0].posY = 10
 
     def boundaryCond2P(self):
         self.points[0].posX -= 10
@@ -168,19 +171,31 @@ class springMassBody:
     def initialize(self):
         self.computeElasticForcesOnPoint()
         self.applyGravity()
+
         if self.pinpoint:
-            self.pinAPoint()
-
-        for point in self.points:
-            accx = (point.totalXforce - point.vx * point.damping)/point.mass 
-            accy = (point.totalYforce - point.vy * point.damping)/point.mass
-            point.vx += accx
-            point.vy += accy
-            point.posX += accx
-            point.posY += accy
-            
-
-        self.draw()
+            for point in self.points:
+                if point.isPinned:
+                    accx = (point.totalXforce - point.vx * point.damping)/point.mass 
+                    accy = (point.totalYforce - point.vy * point.damping)/point.mass
+                    point.vx += accx
+                    point.vy += accy 
+                    point.posX += 0
+                    point.posY += 0
+                else:
+                    accx = (point.totalXforce - point.vx * point.damping)/point.mass 
+                    accy = (point.totalYforce - point.vy * point.damping)/point.mass
+                    point.vx += accx
+                    point.vy += accy 
+                    point.posX += accx
+                    point.posY += accy
+        else:
+            for point in self.points:
+                accx = (point.totalXforce - point.vx * point.damping)/point.mass 
+                accy = (point.totalYforce - point.vy * point.damping)/point.mass
+                point.vx += accx
+                point.vy += accy 
+                point.posX += accx
+                point.posY += accy 
 
     def draw(self):
         self.poly.draw()
@@ -221,6 +236,7 @@ def makeBeamsList(points: list[pointMass], surf: pygame.surface):
     beams.append(beamElement(points[len(points)-1],points[0], surf))
     return beams
 
+#combinazione di tutti i beam possibili in un poligono
 def makeBeamsCombs(points: list[pointMass], surf: pygame.surface):
     beams = []
     pointCouples = itertools.combinations(points, 2)
