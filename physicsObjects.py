@@ -2,9 +2,10 @@ import math
 import pygame
 import itertools
 import engineManager as em
+import numpy as np
 
 #------costanti------#
-GRAVITY = -0.2
+GRAVITY = 0.002
 #------costanti------#
 
 #------classi------#
@@ -35,7 +36,7 @@ class pointMass(collisonLayer, em.rObject):
         self.totalYforce = 0
         self.vx = 0
         self.vy = 0
-        self.damping = 0.004
+        self.damping = 0.04
         self.isPinned = 0
     def draw(self):
         pygame.draw.circle(self.surf, self.color, [self.posX, self.posY], self.radius)
@@ -55,9 +56,9 @@ class beamElement(em.rObject):
         self.pt2pos = pt2.getPosition()
         self.color = [0,10,10]
         self.surf = surf
-        self.stiffness = 0.0001
-        self.damping = 0.001
-        self.l0 = vectorModulus(pt1.getPosition(), pt2.getPosition())
+        self.stiffness = 0.002
+        self.damping = 0.01
+        self.l0 = vectorModulus(self.pt1pos, self.pt2pos)
 
     def getCurrentLenght(self):
         curLen = vectorModulus(self.pt1.getPosition(), self.pt2.getPosition()) 
@@ -70,10 +71,17 @@ class beamElement(em.rObject):
     def getElasticForce(self):
         deltaL = self.getCurrentLenght() - self.l0 
         eForce = abs(deltaL) * self.stiffness 
-        if self.getCurrentLenght() > self.l0:
-            return -eForce
+        return eForce
+
+    def getDampingForce(self):
+        normPos = np.linalg.norm([self.pt2.getPosition()[0]-self.pt1.getPosition()[0], self.pt2.getPosition()[1]-self.pt1.getPosition()[1]])
+        normalizedPosVect = [(self.pt2.getPosition()[0]-self.pt1.getPosition()[0])/normPos, (self.pt2.getPosition()[1]-self.pt1.getPosition()[1])/normPos]
+        relativeDot = np.dot(normalizedPosVect, [self.pt2.vx - self.pt1.vx, self.pt2.vy - self.pt1.vy])
+        dForce = self.damping * componentModulus(self.pt2.vx - self.pt1.vx, self.pt2.vy - self.pt1.vy)
+        if relativeDot > 0:
+            return -dForce
         else:
-            return eForce
+            return dForce
 
     def draw(self):
         pygame.draw.line(self.surf, self.color, (self.pt1.posX, self.pt1.posY), (self.pt2.posX, self.pt2.posY), 2)
@@ -115,7 +123,6 @@ class regularPolygon(polygon):
         self.contour = makeBeamsList(self.points, surf)
         self.surf = surf
 
-
 #------forme dotate di proprietà fisiche------#
 
 #corpo rigido
@@ -144,14 +151,21 @@ class springMassBody(em.rObject):
 
     def computeElasticForcesOnPoint(self):
         for beam in self.beams:
-            beam.pt1.totalXforce -= (beam.getElasticForce() ) * math.cos(beam.getCurrentOrientation()) 
-            beam.pt1.totalYforce -= (beam.getElasticForce() ) * math.sin(beam.getCurrentOrientation())
-            beam.pt2.totalXforce += (beam.getElasticForce() ) * math.cos(beam.getCurrentOrientation()) 
-            beam.pt2.totalYforce += (beam.getElasticForce() ) * math.sin(beam.getCurrentOrientation())
-    
+            beam.pt1.totalXforce += (beam.getElasticForce() ) * math.cos(beam.getCurrentOrientation()) 
+            beam.pt1.totalYforce += (beam.getElasticForce() ) * math.sin(beam.getCurrentOrientation())
+            beam.pt2.totalXforce -= (beam.getElasticForce() ) * math.cos(beam.getCurrentOrientation()) 
+            beam.pt2.totalYforce -= (beam.getElasticForce() ) * math.sin(beam.getCurrentOrientation())
+
+    def computeDampingForcesOnPoint(self):
+        for beam in self.beams:
+            beam.pt1.totalXforce += (beam.getDampingForce() ) * math.cos(beam.getCurrentOrientation())
+            beam.pt1.totalYforce += (beam.getDampingForce() ) * math.sin(beam.getCurrentOrientation())
+            beam.pt2.totalXforce += (beam.getDampingForce() ) * math.cos(beam.getCurrentOrientation())
+            beam.pt2.totalYforce += (beam.getDampingForce() ) * math.sin(beam.getCurrentOrientation())
+
     def applyGravity(self):
         for point in self.points:
-            point.vy += GRAVITY
+            point.totalYforce += GRAVITY * point.mass 
 
     def boundaryCond(self):
         self.points[1].posX += 30
@@ -159,7 +173,9 @@ class springMassBody(em.rObject):
     def pinAPoint(self):
         if self.pinpoint:
             self.points[0].isPinned = 1
-            self.points[0].posX = 200
+            self.points[0].totalXforce = 0
+            self.points[0].totalYforce = 0
+            self.points[0].posX = 400
             self.points[0].posY = 10
 
     def boundaryCond2P(self):
@@ -169,57 +185,53 @@ class springMassBody(em.rObject):
         self.points[1].posY += 10
 
     def initialize(self):
+        for point in self.points:
+            point.totalXforce = 0
+            point.totalYforce = 0
+
         self.computeElasticForcesOnPoint()
+        self.computeDampingForcesOnPoint()
         self.applyGravity()
 
-        if self.pinpoint:
-            for point in self.points:
-                if point.isPinned:
-                    accx = (point.totalXforce - point.vx * point.damping)/point.mass 
-                    accy = (point.totalYforce - point.vy * point.damping)/point.mass
-                    point.vx += accx
-                    point.vy += accy 
-                    point.posX += 0
-                    point.posY += 0
-                else:
-                    accx = (point.totalXforce - point.vx * point.damping)/point.mass 
-                    accy = (point.totalYforce - point.vy * point.damping)/point.mass
-                    point.vx += accx
-                    point.vy += accy 
-                    point.posX += accx
-                    point.posY += accy
-        else:
-            for point in self.points:
-                accx = (point.totalXforce - point.vx * point.damping)/point.mass 
-                accy = (point.totalYforce - point.vy * point.damping)/point.mass
-                point.vx += accx
-                point.vy += accy 
-                point.posX += accx
-                point.posY += accy 
+        for point in self.points:
+            if point.isPinned:
+                point.posX += 0
+                point.posY += 0
+            else:
+                accx = (point.totalXforce)/point.mass 
+                accy = (point.totalYforce)/point.mass
+                point.vx += accx 
+                point.vy += accy
+                point.posX += point.vx
+                point.posY += point.vy 
 
     def draw(self):
         self.poly.draw()
 
-#------funzioni generice di calcolo e conversione------#
+#------funzioni generiche di calcolo e conversione------#
 
 #calcolo dei vertici di un poligono regolare
 def regularVertCalc(sideNum, radius):
     vertices = []
     k = 0 
     for k in range(k,sideNum):
-        vertices.append((radius*math.cos(2*math.pi*k/sideNum) + 200 ,radius*math.sin(2*math.pi*k/sideNum) + 200))   
+        vertices.append((radius*math.cos(2*math.pi*k/sideNum) ,radius*math.sin(2*math.pi*k/sideNum)))   
     return vertices
 
 #conversione di un set di vertici in un set di punti
 def vertsToPoints(verts: list[tuple], surf: pygame.surface):
     points = []
     for vert in verts: 
-        points.append(pointMass(5,vert[0],vert[1],surf))
+        points.append(pointMass(10,vert[0],vert[1],surf))
     return points
 
 #modulo di un vettore
 def vectorModulus(p1pos: tuple, p2pos: tuple):
     modulus = math.sqrt(math.pow((p2pos[0] - p1pos[0]),2) + math.pow((p2pos[1] - p1pos[1]),2))
+    return modulus
+
+def componentModulus(x, y):
+    modulus = math.sqrt(math.pow(x,2) + math.pow(y,2))
     return modulus
 
 #direzione di un vettore
@@ -231,9 +243,12 @@ def beamDirection(p1pos: tuple, p2pos: tuple):
 #la lista viene creata in modo da fare una linea chiusa
 def makeBeamsList(points: list[pointMass], surf: pygame.surface):
     beams = []
-    for i in range(1,len(points)):
-        beams.append(beamElement(points[i-1],points[i], surf))
-    beams.append(beamElement(points[len(points)-1],points[0], surf))
+    if len(points) == 2:
+        beams.append(beamElement(points[0],points[1], surf))
+    else:
+        for i in range(1,len(points)):
+            beams.append(beamElement(points[i-1],points[i], surf))
+        beams.append(beamElement(points[len(points)-1],points[0], surf))
     return beams
 
 #combinazione di tutti i beam possibili in un poligono
