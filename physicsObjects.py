@@ -5,15 +5,19 @@ import engineManager as em
 import numpy as np
 
 #------costanti------#
-GRAVITY = 0.002
+GRAVITY = 0.001
+DAMPING = 1.47
+STIFFNESS = 1.5
 #------costanti------#
 
 #------classi------#
 
+#layer di collisione
 class collisonLayer():
     def __init__(self):
         self.isGrounded = 0
 
+#collisore work in progress
 class collider:
     def __init__(self, posx, posy, surf: pygame.surface):
         self.posx = posx
@@ -56,8 +60,8 @@ class beamElement(em.rObject):
         self.pt2pos = pt2.getPosition()
         self.color = [0,10,10]
         self.surf = surf
-        self.stiffness = 0.002
-        self.damping = 0.01
+        self.stiffness = STIFFNESS
+        self.damping = DAMPING
         self.l0 = vectorModulus(self.pt1pos, self.pt2pos)
 
     def getCurrentLenght(self):
@@ -71,7 +75,11 @@ class beamElement(em.rObject):
     def getElasticForce(self):
         deltaL = self.getCurrentLenght() - self.l0 
         eForce = abs(deltaL) * self.stiffness 
-        return eForce
+        
+        if self.getCurrentLenght() - self.l0 > 0:
+            return -eForce
+        else:
+            return eForce
 
     def getDampingForce(self):
         normPos = np.linalg.norm([self.pt2.getPosition()[0]-self.pt1.getPosition()[0], self.pt2.getPosition()[1]-self.pt1.getPosition()[1]])
@@ -151,21 +159,21 @@ class springMassBody(em.rObject):
 
     def computeElasticForcesOnPoint(self):
         for beam in self.beams:
-            beam.pt1.totalXforce += (beam.getElasticForce() ) * math.cos(beam.getCurrentOrientation()) 
-            beam.pt1.totalYforce += (beam.getElasticForce() ) * math.sin(beam.getCurrentOrientation())
-            beam.pt2.totalXforce -= (beam.getElasticForce() ) * math.cos(beam.getCurrentOrientation()) 
-            beam.pt2.totalYforce -= (beam.getElasticForce() ) * math.sin(beam.getCurrentOrientation())
-
+            beam.pt1.totalXforce -= beam.getElasticForce() * math.cos(beam.getCurrentOrientation()) 
+            beam.pt1.totalYforce -= beam.getElasticForce() * math.sin(beam.getCurrentOrientation())
+            beam.pt2.totalXforce += beam.getElasticForce() * math.cos(beam.getCurrentOrientation()) 
+            beam.pt2.totalYforce += beam.getElasticForce() * math.sin(beam.getCurrentOrientation()) 
     def computeDampingForcesOnPoint(self):
         for beam in self.beams:
-            beam.pt1.totalXforce += (beam.getDampingForce() ) * math.cos(beam.getCurrentOrientation())
-            beam.pt1.totalYforce += (beam.getDampingForce() ) * math.sin(beam.getCurrentOrientation())
-            beam.pt2.totalXforce += (beam.getDampingForce() ) * math.cos(beam.getCurrentOrientation())
-            beam.pt2.totalYforce += (beam.getDampingForce() ) * math.sin(beam.getCurrentOrientation())
+            beam.pt1.totalXforce -= beam.getDampingForce() * math.cos(beam.getCurrentOrientation())
+            beam.pt1.totalYforce -= beam.getDampingForce() * math.sin(beam.getCurrentOrientation())
+            beam.pt2.totalXforce += beam.getDampingForce() * math.cos(beam.getCurrentOrientation())
+            beam.pt2.totalYforce += beam.getDampingForce() * math.sin(beam.getCurrentOrientation())
 
     def applyGravity(self):
-        for point in self.points:
-            point.totalYforce += GRAVITY * point.mass 
+        for beam in self.beams:
+            beam.pt1.totalYforce += GRAVITY * beam.pt1.mass 
+            beam.pt2.totalYforce += GRAVITY * beam.pt2.mass 
 
     def boundaryCond(self):
         self.points[1].posX += 30
@@ -176,13 +184,7 @@ class springMassBody(em.rObject):
             self.points[0].totalXforce = 0
             self.points[0].totalYforce = 0
             self.points[0].posX = 400
-            self.points[0].posY = 10
-
-    def boundaryCond2P(self):
-        self.points[0].posX -= 10
-        self.points[0].posY -= 10
-        self.points[1].posX += 10
-        self.points[1].posY += 10
+            self.points[0].posY = 400
 
     def initialize(self):
         for point in self.points:
@@ -191,6 +193,7 @@ class springMassBody(em.rObject):
 
         self.computeElasticForcesOnPoint()
         self.computeDampingForcesOnPoint()
+        self.groundCollision()
         self.applyGravity()
 
         for point in self.points:
@@ -200,10 +203,15 @@ class springMassBody(em.rObject):
             else:
                 accx = (point.totalXforce)/point.mass 
                 accy = (point.totalYforce)/point.mass
-                point.vx += accx 
-                point.vy += accy
+                point.vx += accx - point.vx * 0.0006
+                point.vy += accy - point.vy * 0.0006
                 point.posX += point.vx
                 point.posY += point.vy 
+
+    def groundCollision(self):
+        for point in self.points:
+            if point.posY >= 700:
+                point.posY = 700
 
     def draw(self):
         self.poly.draw()
@@ -222,7 +230,7 @@ def regularVertCalc(sideNum, radius):
 def vertsToPoints(verts: list[tuple], surf: pygame.surface):
     points = []
     for vert in verts: 
-        points.append(pointMass(10,vert[0],vert[1],surf))
+        points.append(pointMass(700,vert[0],vert[1],surf))
     return points
 
 #modulo di un vettore
@@ -230,6 +238,7 @@ def vectorModulus(p1pos: tuple, p2pos: tuple):
     modulus = math.sqrt(math.pow((p2pos[0] - p1pos[0]),2) + math.pow((p2pos[1] - p1pos[1]),2))
     return modulus
 
+#modulo delle componenti di un vettore
 def componentModulus(x, y):
     modulus = math.sqrt(math.pow(x,2) + math.pow(y,2))
     return modulus
