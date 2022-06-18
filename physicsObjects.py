@@ -203,8 +203,8 @@ class springMassBody(em.rObject):
             else:
                 accx = (point.totalXforce)/point.mass 
                 accy = (point.totalYforce)/point.mass
-                point.vx += accx - point.vx * 0.0006
-                point.vy += accy - point.vy * 0.0006
+                point.vx += accx - point.vx * 0.001
+                point.vy += accy - point.vy * 0.001
                 point.posX += point.vx
                 point.posY += point.vy 
 
