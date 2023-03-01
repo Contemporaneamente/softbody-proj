@@ -20,7 +20,7 @@ points = [po.pointMass(700, 100, 100, screen), po.pointMass(700, 100, 150, scree
 poly1 = po.polygon(points, screen)
 poly2 = po.polygon([poly1.points[1], poly1.points[2], po.pointMass(700, 110, 110, screen)], screen)
 poly3 = po.polygon([poly1.points[0], poly2.points[2]], screen)
-poly4 = po.regularPolygon((100,100), 4, 20, screen)
+poly4 = po.regularPolygon((400,100), 6, 20, screen)
 
 smpTest2 = po.springMassBody(poly1, screen, 0)
 smpTest3 = po.springMassBody(poly2, screen, 0)
@@ -62,6 +62,9 @@ while render:
         smpTest5.points[1].isPinned = 1
         smpTest5.points[1].posX = pygame.mouse.get_pos()[0]
         smpTest5.points[1].posY = pygame.mouse.get_pos()[1]
+        for point in smpTest5.points:
+            point.totalYforce = 0
+            point.totalXforce = 0
     else:
         smpTest5.points[1].isPinned = 0
 
