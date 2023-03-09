@@ -61,7 +61,14 @@ while render:
     screen.fill((252,252,253))  
 
     if pygame.mouse.get_pressed()[0]:
-        pass
+        smRet.points[4].isPinned = 1
+        smRet.points[4].posX = pygame.mouse.get_pos()[0]
+        smRet.points[4].posY = pygame.mouse.get_pos()[1]
+        for point in smRet.points:
+            point.totalYforce = 0
+            point.totalXforce = 0
+    else:
+        smRet.points[4].isPinned = 0
 
     #l = po.vectorModulus(smpTest2.points[0].getPosition(),smpTest2.points[1].getPosition())
 

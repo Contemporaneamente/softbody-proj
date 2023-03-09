@@ -9,6 +9,7 @@ GRAVITY = 0.003
 DAMPING = 4
 STIFFNESS = 5
 AIR_RESISTANCE = 0.003
+TIMESTEP = 0.5
 #------costanti------#
 
 #------classi------#
@@ -230,10 +231,10 @@ class springMassBody(em.rObject):
             else:
                 accx = (point.totalXforce)/point.mass 
                 accy = (point.totalYforce)/point.mass
-                point.vx += accx - point.vx * AIR_RESISTANCE
-                point.vy += accy - point.vy * AIR_RESISTANCE
-                point.posX += point.vx
-                point.posY += point.vy 
+                point.vx += (accx - point.vx * AIR_RESISTANCE) * TIMESTEP
+                point.vy += (accy - point.vy * AIR_RESISTANCE) * TIMESTEP
+                point.posX += (point.vx) * TIMESTEP
+                point.posY += (point.vy) * TIMESTEP
 
     def groundCollision(self):
         for point in self.points:
@@ -299,10 +300,10 @@ class springMassBodyReticulate(em.rObject):
             else:
                 accx = (point.totalXforce)/point.mass 
                 accy = (point.totalYforce)/point.mass
-                point.vx += accx - point.vx * AIR_RESISTANCE
-                point.vy += accy - point.vy * AIR_RESISTANCE
-                point.posX += point.vx
-                point.posY += point.vy 
+                point.vx += (accx - point.vx * AIR_RESISTANCE) * TIMESTEP
+                point.vy += (accy - point.vy * AIR_RESISTANCE) * TIMESTEP
+                point.posX += (point.vx) * TIMESTEP
+                point.posY += (point.vy) * TIMESTEP
 
     def groundCollision(self):
         for point in self.points:
